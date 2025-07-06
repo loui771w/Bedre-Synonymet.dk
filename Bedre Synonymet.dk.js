@@ -1,11 +1,13 @@
 // ==UserScript==
-// @name Bedre Synonymet.dk
-// @namespace http://tampermonkey.net/
-// @version 1.0
-// @description Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering.
-// @match https://synonymet.dk/*
-// @icon https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
-// @grant none
+// @name         Bedre Synonymet.dk
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering.
+// @match        https://synonymet.dk/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
+// @updateURL    https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
+// @downloadURL  https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
+// @grant        none
 // ==/UserScript==
 
 (function () {
