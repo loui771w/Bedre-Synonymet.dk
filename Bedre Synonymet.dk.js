@@ -8,6 +8,7 @@
 // @updateURL    https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
 // @downloadURL  https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
 // @grant        none
+// @license      GPL-3.0-or-later
 // ==/UserScript==
 
 (function () {
