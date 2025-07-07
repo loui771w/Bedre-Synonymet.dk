@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bedre Synonymet.dk
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.1.1
 // @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering. Understøtter både desktop wordcloud og mobile liste.
 // @match        https://synonymet.dk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
