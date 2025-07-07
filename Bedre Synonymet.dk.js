@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bedre Synonymet.dk
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering.
 // @match        https://synonymet.dk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
@@ -163,12 +163,36 @@
     checkSynonyms();
   }
 
+  function sortListAlphabetically(elements) {
+    if (elements.length === 0) return;
+
+    const parent = elements[0].parentElement;
+    if (!parent) return;
+
+    const sortedElements = Array.from(elements).sort((a, b) => {
+      const textA = a.textContent.trim().toLowerCase();
+      const textB = b.textContent.trim().toLowerCase();
+      return textA.localeCompare(textB, "da", { sensitivity: "base" });
+    });
+
+    elements.forEach((el) => el.remove());
+
+    sortedElements.forEach((el) => parent.appendChild(el));
+
+    log.success(`Sorted ${sortedElements.length} synonyms alphabetically`);
+  }
+
   function enableFiltering(elements, formatType) {
     const filterSelect = $("#filter-length");
     const clearButton = $("#clear-filter");
     const statusText = $("#status-text");
 
     if (!filterSelect || !clearButton) return;
+
+    if (formatType === "list") {
+      sortListAlphabetically(elements);
+      elements = $$(".list-group-item");
+    }
 
     const getTextContent = (element) => {
       if (formatType === "list") {
