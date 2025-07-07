@@ -2,7 +2,7 @@
 // @name         Bedre Synonymet.dk
 // @namespace    http://tampermonkey.net/
 // @version      1.1.2
-// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering.
+// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering. TIP: Brug en User-Agent spoofer, så hjemmesiden tror, du bruger en mobiltelefon. Derefter vises den fulde liste med alle ord.
 // @match        https://synonymet.dk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
 // @updateURL    https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
