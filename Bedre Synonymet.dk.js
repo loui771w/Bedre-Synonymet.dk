@@ -182,14 +182,9 @@
     const uniqueLengths = [...new Set(lengths)].sort((a, b) => a - b);
 
     filterSelect.innerHTML =
-      '<option value="">Alle ordlængder</option>' +
+      '<option value="">Alle antal tegn</option>' +
       uniqueLengths
-        .map(
-          (len) =>
-            `<option value="${len}">${len} ${
-              len === 1 ? "bogstav" : "bogstaver"
-            }</option>`
-        )
+        .map((len) => `<option value="${len}">${len} tegn</option>`)
         .join("");
 
     filterSelect.disabled = false;
@@ -229,7 +224,7 @@
 
       if (statusText) {
         if (targetLength) {
-          statusText.textContent = `Viser ${shownCount} ord med ${targetLength} bogstaver (skjuler ${hiddenCount} ord)`;
+          statusText.textContent = `Viser ${shownCount} ord med ${targetLength} tegn (skjuler ${hiddenCount} ord)`;
         } else {
           statusText.textContent = `Viser ${shownCount} ord`;
         }
