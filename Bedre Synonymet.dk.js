@@ -75,7 +75,7 @@
     );
   }
 
-  function createFilterUI() {
+  function createUI() {
     const targetRow = $("div.row.mt-5.justify-content-md-center.text-center");
     if (!targetRow || $("#search-form")) return;
 
@@ -96,8 +96,7 @@
               <button id="clear-filter" class="btn btn-secondary" type="button" disabled>Ryd</button>
             </span>
           </div>
-          <div id="loading-text" class="text-muted small">Venter på at ordskyen indlæses...</div>
-          <div id="filter-status" class="text-muted small" style="display: none;"></div>
+          <div id="status-text" class="text-muted small">Synonymer indlæses...</div>
         </form>
       `;
 
@@ -167,8 +166,7 @@
   function enableFiltering(elements, formatType) {
     const filterSelect = $("#filter-length");
     const clearButton = $("#clear-filter");
-    const loadingText = $("#loading-text");
-    const statusText = $("#filter-status");
+    const statusText = $("#status-text");
 
     if (!filterSelect || !clearButton) return;
 
@@ -196,7 +194,6 @@
 
     filterSelect.disabled = false;
     clearButton.disabled = false;
-    if (loadingText) loadingText.style.display = "none";
 
     const filterWords = () => {
       const targetLength = filterSelect.value.trim();
@@ -233,9 +230,8 @@
       if (statusText) {
         if (targetLength) {
           statusText.textContent = `Viser ${shownCount} ord med ${targetLength} bogstaver (skjuler ${hiddenCount} ord)`;
-          statusText.style.display = "block";
         } else {
-          statusText.style.display = "none";
+          statusText.textContent = `Viser ${shownCount} ord`;
         }
       }
     };
@@ -245,6 +241,10 @@
       filterSelect.value = "";
       filterWords();
     });
+
+    if (statusText) {
+      statusText.textContent = `Viser ${elements.length} ord`;
+    }
 
     if (elements.length > 0) {
       log.success(
@@ -277,7 +277,7 @@
 
   if (isWordPage) {
     fixWordDisplay();
-    createFilterUI();
+    createUI();
   } else {
     setupMainPageValidation();
   }
