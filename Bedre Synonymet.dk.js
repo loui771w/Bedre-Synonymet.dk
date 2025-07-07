@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bedre Synonymet.dk
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering.
+// @version      1.1
+// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering. Understøtter både desktop wordcloud og mobile liste.
 // @match        https://synonymet.dk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
 // @updateURL    https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
@@ -71,7 +71,7 @@
     });
 
     log.success(
-      `Word corrected to "${correctWord}" and ${fixedCount} paragraph(s) fixed.`
+      `Word corrected to "${correctWord}" and ${fixedCount} paragraph(s) fixed`
     );
   }
 
@@ -111,24 +111,33 @@
       }
     });
 
-    waitForWordCloud();
+    waitForSynonyms();
   }
 
-  function waitForWordCloud() {
+  function waitForSynonyms() {
     let lastCount = 0;
     let stableChecks = 0;
     const maxChecks = 50; // 5 sekunder (max)
     let checkCount = 0;
 
-    const checkWords = () => {
-      const spans = $$(".wordcloud-span");
-      const currentCount = spans.length;
+    const checkSynonyms = () => {
+      // Stationær
+      let synonymElements = $$(".wordcloud-span");
+      let formatType = "wordcloud";
+
+      // Mobil
+      if (synonymElements.length === 0) {
+        synonymElements = $$(".list-group-item");
+        formatType = "list";
+      }
+
+      const currentCount = synonymElements.length;
 
       if (currentCount > 0) {
         if (currentCount === lastCount) {
           stableChecks++;
           if (stableChecks >= 3) {
-            enableFiltering(spans);
+            enableFiltering(synonymElements, formatType);
             return;
           }
         } else {
@@ -139,19 +148,23 @@
 
       checkCount++;
       if (checkCount < maxChecks) {
-        setTimeout(checkWords, 100);
+        setTimeout(checkSynonyms, 100);
       } else {
-        log.timeout(
-          "Timeout waiting for word cloud, enabling filtering anyway"
-        );
-        enableFiltering($$(".wordcloud-span"));
+        log.timeout("Timeout waiting for synonyms, enabling filtering anyway");
+        let fallbackElements = $$(".wordcloud-span");
+        let fallbackFormat = "wordcloud";
+        if (fallbackElements.length === 0) {
+          fallbackElements = $$(".list-group-item");
+          fallbackFormat = "list";
+        }
+        enableFiltering(fallbackElements, fallbackFormat);
       }
     };
 
-    checkWords();
+    checkSynonyms();
   }
 
-  function enableFiltering(spans) {
+  function enableFiltering(elements, formatType) {
     const filterSelect = $("#filter-length");
     const clearButton = $("#clear-filter");
     const loadingText = $("#loading-text");
@@ -159,7 +172,15 @@
 
     if (!filterSelect || !clearButton) return;
 
-    const lengths = Array.from(spans, (s) => s.textContent.length);
+    const getTextContent = (element) => {
+      if (formatType === "list") {
+        return element.textContent.trim();
+      } else {
+        return element.textContent;
+      }
+    };
+
+    const lengths = Array.from(elements, (el) => getTextContent(el).length);
     const uniqueLengths = [...new Set(lengths)].sort((a, b) => a - b);
 
     filterSelect.innerHTML =
@@ -183,11 +204,31 @@
       let hiddenCount = 0,
         shownCount = 0;
 
-      spans.forEach((span) => {
-        const shouldHide = targetNum && span.textContent.length !== targetNum;
-        span.style.display = shouldHide ? "none" : "block";
+      elements.forEach((element) => {
+        const textContent = getTextContent(element);
+        const shouldHide = targetNum && textContent.length !== targetNum;
+        element.style.display = shouldHide ? "none" : "";
         shouldHide ? hiddenCount++ : shownCount++;
       });
+
+      if (formatType === "list") {
+        elements.forEach((el) => {
+          el.style.borderRadius = "";
+        });
+
+        const visibleElements = Array.from(elements).filter(
+          (el) => el.style.display !== "none"
+        );
+
+        if (visibleElements.length > 0) {
+          visibleElements[0].style.borderTopLeftRadius = ".25rem";
+          visibleElements[0].style.borderTopRightRadius = ".25rem";
+
+          const lastElement = visibleElements[visibleElements.length - 1];
+          lastElement.style.borderBottomLeftRadius = ".25rem";
+          lastElement.style.borderBottomRightRadius = ".25rem";
+        }
+      }
 
       if (statusText) {
         if (targetLength) {
@@ -205,11 +246,11 @@
       filterWords();
     });
 
-    if (spans.length > 0) {
+    if (elements.length > 0) {
       log.success(
-        `Filtering enabled! ${spans.length} words (${Math.min(
-          ...lengths
-        )}-${Math.max(...lengths)} letter(s))`
+        `Filtering enabled for ${formatType}! ${
+          elements.length
+        } words (${Math.min(...lengths)}-${Math.max(...lengths)} letter(s))`
       );
     } else {
       log.fail("No words found — filtering disabled.");
