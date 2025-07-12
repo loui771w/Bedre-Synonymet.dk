@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Bedre Synonymet.dk
 // @namespace    http://tampermonkey.net/
-// @version      1.1.2
-// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering. TIP: Brug en User-Agent spoofer, så hjemmesiden tror, du bruger en mobiltelefon. Derefter vises den fulde liste med alle ord.
+// @version      1.2.0
+// @description  Fjerner Facebook-reklamer fra hele synonymet.dk. Tilføjer en korrekt overskrift med Æ, Ø og Å (m.m.) samt en mulighed for filtrering efter længde og alfabetisk rækkevidde. Understøtter eksport af synonymer som TXT eller CSV. TIP: Brug en User-Agent spoofer, så hjemmesiden tror, du bruger en mobiltelefon. Derefter vises den fulde liste med alle ord.
 // @match        https://synonymet.dk/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=synonymet.dk
 // @updateURL    https://raw.githubusercontent.com/loui771w/Bedre-Synonymet.dk/main/Bedre%20Synonymet.dk.js
@@ -19,14 +19,31 @@
     fail: (msg) => console.log(`❌ ⟩ ${msg}`),
     timeout: (msg) => console.log(`⏰ ⟩ ${msg}`),
   };
+
+  const selectors = {
+    fbSection: "#fbw_id-2",
+    heading: "h2.wp-block-heading",
+    targetRow: "div.row.mt-5.justify-content-md-center.text-center",
+    searchForm: "#search-form",
+    searchInput: "#ord",
+    filterLength: "#filter-length",
+    filterAlpha: "#filter-alpha",
+    clearFilter: "#clear-filter",
+    exportButton: "#export-button",
+    exportSelect: "#export-format",
+    statusText: "#status-text",
+    wordCloud: ".wordcloud-span",
+    listItems: ".list-group-item",
+  };
+
   const isWordPage = location.pathname.startsWith("/ord/");
-  const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => document.querySelectorAll(sel);
+  const $ = (sel) => document.querySelector(selectors[sel] || sel);
+  const $$ = (sel) => document.querySelectorAll(selectors[sel] || sel);
 
   log.success("Script initialized");
 
   function removeFacebookAds() {
-    const fbSection = $("#fbw_id-2");
+    const fbSection = $(selectors.fbSection);
     if (!fbSection) return false;
 
     const parentCol = fbSection.closest("div.col");
@@ -38,7 +55,7 @@
   function fixWordDisplay() {
     if (!isWordPage) return;
 
-    const heading = $("h2.wp-block-heading");
+    const heading = $(selectors.heading);
     const match = location.pathname.match(/\/ord\/([^\/]+)\//);
 
     if (!heading || !match?.[1]) {
@@ -50,7 +67,15 @@
     const currentMatch = heading.textContent.match(/Synonym for (.+)/i);
     const currentWord = currentMatch?.[1]?.trim() || "[unknown]";
 
-    heading.innerHTML = `Synonym for <strong>${correctWord}</strong>`;
+    const synonyms = Array.from(
+      $$(selectors.wordCloud).length
+        ? $$(selectors.wordCloud)
+        : $$(selectors.listItems)
+    );
+
+    heading.innerHTML = `${
+      synonyms.length === 1 ? "Synonym for" : "Synonymer for"
+    } <strong>${correctWord}</strong>`;
 
     const regex = new RegExp(
       `\\b${currentWord.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
@@ -76,8 +101,14 @@
   }
 
   function createUI() {
-    const targetRow = $("div.row.mt-5.justify-content-md-center.text-center");
-    if (!targetRow || $("#search-form")) return;
+    const targetRow = $(selectors.targetRow);
+    if (!targetRow || $(selectors.searchForm)) return;
+
+    targetRow.className = "text-center mt-5";
+    targetRow.style.cssText = `
+      font-family: inherit;
+      color: inherit;
+    `;
 
     targetRow.innerHTML = `
         <form id="search-form" method="get" action="https://synonymet.dk/wp-admin/admin-post.php" onsubmit="setAutoComplete(true);return true;">
@@ -92,41 +123,102 @@
             <select id="filter-length" class="form-control" disabled>
               <option value="">Indlæser...</option>
             </select>
+            <input id="filter-alpha" type="text" class="form-control" placeholder='Filtrér med ét bogstav eller et interval (f.eks. "A" eller "A–Å")' disabled>
             <span class="input-group-btn">
               <button id="clear-filter" class="btn btn-secondary" type="button" disabled>Ryd</button>
             </span>
           </div>
-          <div id="status-text" class="text-muted small">Synonymer indlæses...</div>
+          <div class="input-group input-group-lg mb-2">
+            <button id="export-button" class="btn btn-secondary" type="button" disabled>Gem som...</button>
+            <select id="export-format" class="form-control" disabled>
+              <option value="txt">TXT</option>
+              <option value="csv">CSV</option>
+            </select>
+          </div>
+          <div id="status-text" class="text-muted small">Synonym(er) indlæses...</div>
         </form>
       `;
 
     log.success("UI created");
 
-    $("#search-form").addEventListener("submit", (e) => {
-      const input = $("#ord");
+    $(selectors.searchForm).addEventListener("submit", (e) => {
+      const input = $(selectors.searchInput);
       if (!input?.value.trim()) {
         e.preventDefault();
         log.fail("Search prevented - empty query not allowed");
       }
     });
 
+    const alphaInput = $(selectors.filterAlpha);
+    alphaInput?.addEventListener("input", (e) => {
+      let value = e.target.value.toUpperCase().replace(/[^A-ZÆØÅ]/gi, "");
+      if (value.length >= 2 && value[1] !== "-") {
+        value = `${value[0]}-${value[1]}`;
+      }
+      e.target.value = value;
+    });
+
     waitForSynonyms();
+  }
+
+  function updateStatusText(
+    shownCount,
+    hiddenCount = 0,
+    filters = {},
+    message = ""
+  ) {
+    const statusText = $(selectors.statusText);
+    if (!statusText) return;
+
+    const { length: filterLength, alpha: filterAlpha } = filters;
+    const formatNumber = (num) => num.toLocaleString("da-DK");
+    let filterText = [];
+
+    if (message && message.includes("Fejl")) {
+      statusText.style.color = "#f00"; // Rød farve
+      statusText.textContent = message;
+      return;
+    }
+
+    statusText.style.color = "#636c72"; // Standard farve
+
+    if (filterLength) filterText.push(`${filterLength} tegn`);
+
+    if (filterAlpha) {
+      if (/^[A-ZÆØÅ]$/.test(filterAlpha)) {
+        filterText.push(`ord der starter med ${filterAlpha}`);
+      } else if (/^[A-ZÆØÅ]-[A-ZÆØÅ]$/.test(filterAlpha)) {
+        filterText.push(`ord der starter med bogstaverne ${filterAlpha}`);
+      } else {
+        filterText.push(`bogstavfilter: ${filterAlpha}`);
+      }
+    }
+
+    statusText.textContent = message
+      ? message
+      : shownCount > 0
+      ? filterText.length
+        ? `Viser ${formatNumber(shownCount)} ${
+            shownCount === 1 ? "ord" : "ord"
+          } med ${filterText.join(" og ")} (skjuler ${formatNumber(
+            hiddenCount
+          )} ord)`
+        : `Viser ${formatNumber(shownCount)} ord`
+      : "Ingen ord matcher dine filtre";
   }
 
   function waitForSynonyms() {
     let lastCount = 0;
     let stableChecks = 0;
-    const maxChecks = 50; // 5 sekunder (max)
+    const maxChecks = 50;
     let checkCount = 0;
 
     const checkSynonyms = () => {
-      // Stationær
-      let synonymElements = $$(".wordcloud-span");
+      let synonymElements = $$(selectors.wordCloud);
       let formatType = "wordcloud";
 
-      // Mobil
       if (synonymElements.length === 0) {
-        synonymElements = $$(".list-group-item");
+        synonymElements = $$(selectors.listItems);
         formatType = "list";
       }
 
@@ -150,10 +242,10 @@
         setTimeout(checkSynonyms, 100);
       } else {
         log.timeout("Timeout waiting for synonyms, enabling filtering anyway");
-        let fallbackElements = $$(".wordcloud-span");
+        let fallbackElements = $$(selectors.wordCloud);
         let fallbackFormat = "wordcloud";
         if (fallbackElements.length === 0) {
-          fallbackElements = $$(".list-group-item");
+          fallbackElements = $$(selectors.listItems);
           fallbackFormat = "list";
         }
         enableFiltering(fallbackElements, fallbackFormat);
@@ -183,46 +275,92 @@
   }
 
   function enableFiltering(elements, formatType) {
-    const filterSelect = $("#filter-length");
-    const clearButton = $("#clear-filter");
-    const statusText = $("#status-text");
+    const filterLengthSelect = $(selectors.filterLength);
+    const filterAlphaInput = $(selectors.filterAlpha);
+    const clearButton = $(selectors.clearFilter);
+    const exportButton = $(selectors.exportButton);
+    const exportSelect = $(selectors.exportSelect);
+    const statusText = $(selectors.statusText);
 
-    if (!filterSelect || !clearButton) return;
+    if (
+      !filterLengthSelect ||
+      !filterAlphaInput ||
+      !clearButton ||
+      !exportButton ||
+      !exportSelect
+    )
+      return;
 
     if (formatType === "list") {
       sortListAlphabetically(elements);
-      elements = $$(".list-group-item");
+      elements = $$(selectors.listItems);
     }
 
     const getTextContent = (element) => {
-      if (formatType === "list") {
-        return element.textContent.trim();
-      } else {
-        return element.textContent;
-      }
+      return formatType === "list"
+        ? element.textContent.trim()
+        : element.textContent;
     };
 
     const lengths = Array.from(elements, (el) => getTextContent(el).length);
     const uniqueLengths = [...new Set(lengths)].sort((a, b) => a - b);
 
-    filterSelect.innerHTML =
+    filterLengthSelect.innerHTML =
       '<option value="">Alle antal tegn</option>' +
       uniqueLengths
         .map((len) => `<option value="${len}">${len} tegn</option>`)
         .join("");
 
-    filterSelect.disabled = false;
+    filterLengthSelect.disabled = false;
+    filterAlphaInput.disabled = false;
     clearButton.disabled = false;
+    exportButton.disabled = false;
+    exportSelect.disabled = false;
 
     const filterWords = () => {
-      const targetLength = filterSelect.value.trim();
+      const targetLength = filterLengthSelect.value.trim();
       const targetNum = targetLength ? parseInt(targetLength) : null;
+      const targetAlpha = filterAlphaInput.value.trim().toUpperCase();
+      let alphaRange = null;
+      let error = "";
+
+      if (targetAlpha) {
+        if (/^[A-ZÆØÅ]$/.test(targetAlpha)) {
+          alphaRange = new RegExp(`^${targetAlpha}`, "i");
+        } else if (/^[A-ZÆØÅ]-[A-ZÆØÅ]$/.test(targetAlpha)) {
+          const [start, end] = targetAlpha.split("-");
+          const danishAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ";
+          const startIndex = danishAlphabet.indexOf(start);
+          const endIndex = danishAlphabet.indexOf(end);
+          if (startIndex > endIndex) {
+            error =
+              "Ugyldigt filter: Startbogstavet skal komme før slutbogstavet";
+          } else {
+            const rangeLetters = danishAlphabet.slice(startIndex, endIndex + 1);
+            alphaRange = new RegExp(`^[${rangeLetters}]`, "i");
+          }
+        } else {
+          error =
+            "Ugyldigt format: Indtast enten ét bogstav (f.eks. A) eller et interval (f.eks. A-Å)";
+        }
+      }
+
+      if (error) {
+        updateStatusText(0, 0, {}, error);
+        elements.forEach((element) => {
+          element.style.display = "none";
+        });
+        return;
+      }
+
       let hiddenCount = 0,
         shownCount = 0;
 
       elements.forEach((element) => {
         const textContent = getTextContent(element);
-        const shouldHide = targetNum && textContent.length !== targetNum;
+        const lengthMatch = !targetNum || textContent.length === targetNum;
+        const alphaMatch = !alphaRange || alphaRange.test(textContent);
+        const shouldHide = !lengthMatch || !alphaMatch;
         element.style.display = shouldHide ? "none" : "";
         shouldHide ? hiddenCount++ : shownCount++;
       });
@@ -239,30 +377,78 @@
         if (visibleElements.length > 0) {
           visibleElements[0].style.borderTopLeftRadius = ".25rem";
           visibleElements[0].style.borderTopRightRadius = ".25rem";
-
           const lastElement = visibleElements[visibleElements.length - 1];
           lastElement.style.borderBottomLeftRadius = ".25rem";
           lastElement.style.borderBottomRightRadius = ".25rem";
         }
       }
 
-      if (statusText) {
-        if (targetLength) {
-          statusText.textContent = `Viser ${shownCount} ord med ${targetLength} tegn (skjuler ${hiddenCount} ord)`;
-        } else {
-          statusText.textContent = `Viser ${shownCount} ord`;
-        }
-      }
+      updateStatusText(shownCount, hiddenCount, {
+        length: targetLength,
+        alpha: targetAlpha,
+      });
     };
 
-    filterSelect.addEventListener("change", filterWords);
+    function saveSynonyms() {
+      const visibleElements = Array.from(elements).filter(
+        (el) => el.style.display !== "none"
+      );
+      const synonyms = visibleElements.map((el) => getTextContent(el));
+      const wordMatch = location.pathname.match(/\/ord\/([^\/]+)\//);
+      const word = wordMatch
+        ? decodeURIComponent(wordMatch[1])
+        : $(selectors.searchInput)?.value.trim() || "ukendt";
+      const format = exportSelect.value;
+      let content, mimeType, extension;
+
+      if (format === "txt") {
+        content = synonyms.join("\n");
+        mimeType = "text/plain";
+        extension = "txt";
+      } else if (format === "csv") {
+        content = synonyms.map((word) => `"${word}"`).join("\n");
+        mimeType = "text/csv";
+        extension = "csv";
+      }
+
+      try {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${
+          synonyms.length === 1 ? "Synonym" : "Synonymer"
+        }_${word.toUpperCase()}.${extension}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        log.success(
+          `Saved ${synonyms.length} synonym${
+            synonyms.length === 1 ? "" : "s"
+          } as ${format.toUpperCase()}`
+        );
+        updateStatusText(
+          synonyms.length,
+          0,
+          {},
+          `Synonymer gemt som ${format.toUpperCase()}`
+        );
+      } catch (error) {
+        log.fail(`Save error: ${error.message}`);
+        updateStatusText(0, 0, {}, `Fejl: Kunne ikke gemme synonymer`);
+      }
+    }
+
+    filterLengthSelect.addEventListener("change", filterWords);
+    filterAlphaInput.addEventListener("input", filterWords);
     clearButton.addEventListener("click", () => {
-      filterSelect.value = "";
+      filterLengthSelect.value = "";
+      filterAlphaInput.value = "";
       filterWords();
     });
+    exportButton.addEventListener("click", saveSynonyms);
 
     if (statusText) {
-      statusText.textContent = `Viser ${elements.length} ord`;
+      updateStatusText(elements.length);
     }
 
     if (elements.length > 0) {
@@ -277,7 +463,7 @@
   }
 
   function setupMainPageValidation() {
-    const searchInput = $("#ord");
+    const searchInput = $(selectors.searchInput);
     if (!searchInput) return;
 
     const form = searchInput.closest("form");
@@ -292,25 +478,29 @@
     }
   }
 
-  removeFacebookAds();
+  try {
+    removeFacebookAds();
 
-  if (isWordPage) {
-    fixWordDisplay();
-    createUI();
-  } else {
-    setupMainPageValidation();
+    if (isWordPage) {
+      fixWordDisplay();
+      createUI();
+    } else {
+      setupMainPageValidation();
+    }
+
+    const observer = new MutationObserver(() => {
+      if (removeFacebookAds()) observer.disconnect();
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    setTimeout(() => {
+      observer.disconnect();
+      log.timeout("Observer stopped after 10 seconds");
+    }, 10000);
+  } catch (error) {
+    log.fail(`Script error: ${error.message}`);
   }
-
-  const observer = new MutationObserver(() => {
-    if (removeFacebookAds()) observer.disconnect();
-  });
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
-  setTimeout(() => {
-    observer.disconnect();
-    log.timeout("Observer stopped after 10 seconds");
-  }, 10000);
 })();
